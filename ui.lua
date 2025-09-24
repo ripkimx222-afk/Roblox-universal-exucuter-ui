@@ -642,9 +642,4 @@ local function loadState()
 	if type(tx) == "number" and type(ty) == "number" then toggle.Position = UDim2.new(0, tx, 0, ty) end
 	if type(lr) == "number" then setLanguage(lr == 1) end
 	if type(fe) == "number" then focusOffsetEnabled = (fe == 1); focusToggle.Text = focusOffsetEnabled and "Focus offset: ON" or "Focus offset: OFF" end
-	if type(fo) == "number" then focusOffsetSlider.set(fo) end
-end
-
-loadState()
-setLanguage(true)
-openUI()
+	if
