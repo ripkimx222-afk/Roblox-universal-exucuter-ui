@@ -1,8 +1,11 @@
---[[ Fog Hub - Universal Executors
-     By Hikmes0
-     Полный LocalScript: UI + Themes + Profiles + Execute + Universal (Infinite Yield) + Toasts + SFX + Drag/Resize/Animations
-     Требует (опционально) exploit API: writefile/readfile/isfile/delfile
---]]
+--[[
+  Fog Hub - Universal Executors (updated)
+  By Hikmes0
+  Исправления: окно не сплющивается при повторном открытии, ресайз не двигает окно,
+  позиция и размер сохраняются и восстанавливаются, растягивание блокирует перетаскивание.
+  Дополнительно: Clear, Beautify, Delay Execute, быстрые пресеты, улучшенные анимации и SFX.
+  Требует (опционально) exploit API: writefile/readfile/isfile/delfile
+]]
 
 -- Services
 local Players = game:GetService("Players")
@@ -11,43 +14,32 @@ local HttpService = game:GetService("HttpService")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
-local player = Players.LocalPlayer
-local parentGui = player:WaitForChild("PlayerGui")
+local LocalPlayer = Players.LocalPlayer
+local parentGui = LocalPlayer:WaitForChild("PlayerGui")
 
--- Detect file API
+-- File API detection
 local HAS_WRITEFILE = type(writefile) == "function"
 local HAS_READFILE  = type(readfile) == "function"
 local HAS_ISFILE    = type(isfile) == "function"
 local HAS_DELFILE   = type(delfile) == "function"
 
--- Files
+-- Filenames
 local PROFILES_FILE = "FogHub_Profiles.json"
 local SETTINGS_FILE = "FogHub_Settings.json"
 
--- Utils: safe encode/decode
-local function safeEncode(tbl)
-    local ok,res = pcall(function() return HttpService:JSONEncode(tbl) end)
-    if ok then return res end
+-- Helpers
+local function safeEncode(t)
+    local ok, s = pcall(function() return HttpService:JSONEncode(t) end)
+    if ok then return s end
     return nil
 end
-local function safeDecode(str)
-    if type(str) ~= "string" then return nil end
-    local ok,res = pcall(function() return HttpService:JSONDecode(str) end)
-    if ok then return res end
+local function safeDecode(s)
+    if type(s) ~= "string" then return nil end
+    local ok, t = pcall(function() return HttpService:JSONDecode(s) end)
+    if ok then return t end
     return nil
 end
 
--- File wrappers with fallback
-local volatileProfiles = {nil,nil,nil}
-local volatileSettings = nil
-
-local function fileExists(name)
-    if HAS_ISFILE then
-        local ok, res = pcall(isfile, name)
-        if ok then return res end
-    end
-    return false
-end
 local function fileRead(name)
     if HAS_READFILE then
         local ok, res = pcall(readfile, name)
@@ -58,34 +50,37 @@ end
 local function fileWrite(name, content)
     if HAS_WRITEFILE then
         local ok, err = pcall(function() writefile(name, content) end)
-        if ok then return true else return false, err end
-    else
-        return false, "no_writefile"
+        if ok then return true end
+        return false, err
     end
-end
-local function fileDelete(name)
-    if HAS_DELFILE then pcall(delfile, name) end
+    return false, "no_writefile"
 end
 
--- Default configuration
+-- Default things
 local THEMES = {
-    Default = { name="Default", window=Color3.fromRGB(42,18,66), accent=Color3.fromRGB(173,107,255), button=Color3.fromRGB(255,205,0), symbol="⚡", sfx={open="rbxassetid://12221976", close="rbxassetid://9083627113", click="rbxassetid://4307186075"} },
-    Cyberpunk = { name="Cyberpunk", window=Color3.fromRGB(8,8,18), accent=Color3.fromRGB(0,200,255), button=Color3.fromRGB(0,200,255), symbol="💠", sfx={open="rbxassetid://9083627113", close="rbxassetid://12221976", click="rbxassetid://4307186075"} },
-    Neon = { name="Neon", window=Color3.fromRGB(25,0,40), accent=Color3.fromRGB(255,0,200), button=Color3.fromRGB(255,0,200), symbol="✨", sfx={open="rbxassetid://12221976", close="rbxassetid://4307186075", click="rbxassetid://408524543"} },
-    Matrix = { name="Matrix", window=Color3.fromRGB(6,6,6), accent=Color3.fromRGB(0,255,120), button=Color3.fromRGB(0,200,0), symbol="🟢", sfx={open="rbxassetid://12221976", close="rbxassetid://9083627113", click="rbxassetid://4307186075"} },
-    Inferno = { name="Inferno", window=Color3.fromRGB(30,6,6), accent=Color3.fromRGB(255,80,0), button=Color3.fromRGB(255,140,0), symbol="🔥", sfx={open="rbxassetid://9083627113", close="rbxassetid://12221976", click="rbxassetid://4307186075"} },
-    Crystal = { name="Crystal", window=Color3.fromRGB(38,6,66), accent=Color3.fromRGB(150,255,255), button=Color3.fromRGB(170,120,255), symbol="💎", sfx={open="rbxassetid://9083627113", close="rbxassetid://12221976", click="rbxassetid://4307186075"} },
-    Pay2Win = { name="Pay2Win", window=Color3.fromRGB(12,8,10), accent=Color3.fromRGB(255,210,0), button=Color3.fromRGB(255,200,0), symbol="💰", sfx={open="rbxassetid://138129320", close="rbxassetid://9083627113", click="rbxassetid://4307186075"} },
+    Default = { window=Color3.fromRGB(42,18,66), accent=Color3.fromRGB(173,107,255), button=Color3.fromRGB(255,205,0), symbol="⚡",
+                sfx={open="rbxassetid://12221976", close="rbxassetid://9083627113", click="rbxassetid://4307186075"} },
+    Cyberpunk = { window=Color3.fromRGB(8,8,18), accent=Color3.fromRGB(0,200,255), button=Color3.fromRGB(0,200,255), symbol="💠",
+                  sfx={open="rbxassetid://9083627113", close="rbxassetid://12221976", click="rbxassetid://4307186075"} },
+    Neon = { window=Color3.fromRGB(25,0,40), accent=Color3.fromRGB(255,0,200), button=Color3.fromRGB(255,0,200), symbol="✨",
+             sfx={open="rbxassetid://12221976", close="rbxassetid://4307186075", click="rbxassetid://408524543"} },
+    Matrix = { window=Color3.fromRGB(6,6,6), accent=Color3.fromRGB(0,255,120), button=Color3.fromRGB(0,200,0), symbol="🟢",
+               sfx={open="rbxassetid://12221976", close="rbxassetid://9083627113", click="rbxassetid://4307186075"} },
+    Inferno = { window=Color3.fromRGB(30,6,6), accent=Color3.fromRGB(255,80,0), button=Color3.fromRGB(255,140,0), symbol="🔥",
+                sfx={open="rbxassetid://9083627113", close="rbxassetid://12221976", click="rbxassetid://4307186075"} },
+    Crystal = { window=Color3.fromRGB(38,6,66), accent=Color3.fromRGB(170,120,255), button=Color3.fromRGB(170,120,255), symbol="💎",
+                sfx={open="rbxassetid://9083627113", close="rbxassetid://12221976", click="rbxassetid://4307186075"} },
+    Pay2Win = { window=Color3.fromRGB(12,8,10), accent=Color3.fromRGB(255,210,0), button=Color3.fromRGB(255,200,0), symbol="💰",
+                sfx={open="rbxassetid://138129320", close="rbxassetid://9083627113", click="rbxassetid://4307186075"} },
 }
 
 local DEFAULT_THEME = "Default"
 local DEFAULT_LANG = "RU"
 local DEFAULT_BASE = "KRNL"
-local MAX_SLOTS = 3
-local MIN_SIZE = Vector2.new(360,220) -- smaller height, wider width later set
+local MAX_PROFILES = 3
+local MIN_SIZE = Vector2.new(380,220)
 
--- Localization
-local L = {
+local LANG = {
     RU = {
         tabs = {"Главная","База","Универсальные","Профили","Настройки"},
         executor = "Исполнитель: %s",
@@ -98,16 +93,11 @@ local L = {
         toast_saved = "Профиль сохранён",
         toast_loaded_profile = "Профиль загружен",
         toast_deleted = "Профиль удалён",
-        save_settings = "Сохранить настройки",
         export = "Экспорт",
         import = "Импорт",
-        rename = "Переименовать",
-        delete = "Удалить",
-        load = "Загрузить",
-        save = "Сохранить",
-        empty = "Пусто",
-        close = "Закрыть",
-        open = "Открыть",
+        clear = "Очистить",
+        beautify = "Формат",
+        delay = "Задержка (с)",
     },
     EN = {
         tabs = {"Main","Base","Universal","Profiles","Settings"},
@@ -121,29 +111,24 @@ local L = {
         toast_saved = "Profile saved",
         toast_loaded_profile = "Profile loaded",
         toast_deleted = "Profile deleted",
-        save_settings = "Save settings",
         export = "Export",
         import = "Import",
-        rename = "Rename",
-        delete = "Delete",
-        load = "Load",
-        save = "Save",
-        empty = "Empty",
-        close = "Close",
-        open = "Open",
+        clear = "Clear",
+        beautify = "Beautify",
+        delay = "Delay (s)",
     }
 }
 
--- Load or init settings & profiles
+-- Load settings & profiles
 local SETTINGS = {
     Theme = DEFAULT_THEME,
     Language = DEFAULT_LANG,
     Position = {0.2,0,0.2,0},
-    Size = {820, 360}, -- wider, less height
+    Size = {820, 340}, -- default wide and less tall
     SelectedBase = DEFAULT_BASE,
     SFX = true
 }
-local PROFILES = { nil, nil, nil }
+local PROFILES = {nil, nil, nil}
 
 do
     local s = fileRead(SETTINGS_FILE)
@@ -159,7 +144,7 @@ do
     local p = fileRead(PROFILES_FILE)
     local pt = safeDecode(p)
     if type(pt) == "table" then
-        for i=1,MAX_SLOTS do PROFILES[i] = pt[i] end
+        for i=1,MAX_PROFILES do PROFILES[i] = pt[i] end
     end
 end
 
@@ -175,17 +160,17 @@ local function persistSettings()
         })
         if s then fileWrite(SETTINGS_FILE, s) end
     end)
-    if not ok then warn("Persist settings failed", err) end
+    if not ok then warn("persist settings failed", err) end
 end
 local function persistProfiles()
     local ok, err = pcall(function()
         local s = safeEncode(PROFILES)
         if s then fileWrite(PROFILES_FILE, s) end
     end)
-    if not ok then warn("Persist profiles failed", err) end
+    if not ok then warn("persist profiles failed", err) end
 end
 
--- Executors
+-- Executors table (with fallbacks)
 local EXECUTORS = {
     ["XENO"] = function(code) if syn and type(loadstring)=="function" then return pcall(loadstring, code) end return false end,
     ["DELTA X"] = function(code) if delta and type(delta.execute)=="function" then return pcall(function() delta.execute(code) end) end return false end,
@@ -201,91 +186,73 @@ local EXECUTORS = {
 local BASES = {"KRNL","DELTA X","XENO","Arceus X","Fluxus","Electron","Oxygen U","Script-Ware","Evon"}
 SETTINGS.SelectedBase = SETTINGS.SelectedBase or DEFAULT_BASE
 
--- ========== BUILD UI ==========
+-- Build GUI
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "FogHubGUI"
+screenGui.Name = "FogHub_GUI"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = parentGui
 
--- SFX folder
-local SFX = Instance.new("Folder", screenGui); SFX.Name = "SFX"
+local SFXFolder = Instance.new("Folder", screenGui); SFXFolder.Name = "FogSFX"
 local function createSFX(id, name)
-    if not id then return nil end
+    if not id then return end
     local s = Instance.new("Sound")
     s.SoundId = id
     s.Volume = 0.8
     s.Name = name or "sfx"
-    s.Parent = SFX
+    s.Parent = SFXFolder
     return s
 end
 
--- Root window
+-- Window
 local Window = Instance.new("Frame", screenGui)
 Window.Name = "FogHub_Window"
 Window.Size = UDim2.new(0, SETTINGS.Size[1], 0, SETTINGS.Size[2])
-local pos = SETTINGS.Position
-Window.Position = UDim2.new(pos[1], pos[2] or 0, pos[3], pos[4] or 0)
+Window.Position = UDim2.new(SETTINGS.Position[1], SETTINGS.Position[2] or 0, SETTINGS.Position[3], SETTINGS.Position[4] or 0)
 Window.BackgroundColor3 = THEMES[SETTINGS.Theme].window
 Window.Active = true
 Window.ClipsDescendants = true
-local winCorner = Instance.new("UICorner", Window); winCorner.CornerRadius = UDim.new(0,12)
+local winCorner = Instance.new("UICorner", Window); winCorner.CornerRadius = UDim.new(0,10)
 local winStroke = Instance.new("UIStroke", Window); winStroke.Thickness = 1; winStroke.Color = THEMES[SETTINGS.Theme].accent; winStroke.Transparency = 0.35
 
--- Header (title/subtitle) and close button
-local Header = Instance.new("Frame", Window); Header.Name = "Header"; Header.Size = UDim2.new(1,0,0,48); Header.BackgroundTransparency = 1
-local Title = Instance.new("TextLabel", Header); Title.Position = UDim2.new(0,12,0,6); Title.Size = UDim2.new(0.6,-12,0,28); Title.BackgroundTransparency = 1; Title.Font = Enum.Font.GothamBold; Title.TextSize = 20; Title.TextColor3 = Color3.fromRGB(255,255,255); Title.TextXAlignment = Enum.TextXAlignment.Left; Title.Text = "Fog Hub"
-local Sub = Instance.new("TextLabel", Header); Sub.Position = UDim2.new(0,12,0,30); Sub.Size = UDim2.new(0.6,-12,0,16); Sub.BackgroundTransparency = 1; Sub.Font = Enum.Font.Gotham; Sub.TextSize = 12; Sub.TextColor3 = Color3.fromRGB(200,200,200); Sub.Text = "Universal Executors"
-local CloseBtn = Instance.new("TextButton", Header); CloseBtn.Size = UDim2.new(0,36,0,28); CloseBtn.Position = UDim2.new(1,-48,0,10); CloseBtn.AnchorPoint = Vector2.new(0,0); CloseBtn.Text = "✕"; CloseBtn.Font = Enum.Font.GothamBold; CloseBtn.TextSize = 18; CloseBtn.BackgroundTransparency = 0.4; local closeCorner = Instance.new("UICorner", CloseBtn); closeCorner.CornerRadius = UDim.new(0,6)
+-- Header, subtitle, close X
+local Header = Instance.new("Frame", Window); Header.Size = UDim2.new(1,0,0,52); Header.BackgroundTransparency = 1
+local Title = Instance.new("TextLabel", Header); Title.Position = UDim2.new(0,12,0,6); Title.Size = UDim2.new(0.6,0,0,28)
+Title.BackgroundTransparency = 1; Title.Font = Enum.Font.GothamBold; Title.TextSize = 20; Title.TextColor3 = Color3.fromRGB(255,255,255); Title.TextXAlignment = Enum.TextXAlignment.Left; Title.Text = "Fog Hub"
+local Sub = Instance.new("TextLabel", Header); Sub.Position = UDim2.new(0,12,0,30); Sub.Size = UDim2.new(0.6,0,0,16); Sub.BackgroundTransparency = 1; Sub.Font = Enum.Font.Gotham; Sub.TextSize = 12; Sub.TextColor3 = Color3.fromRGB(200,200,200); Sub.Text = "Universal Executors"
+local CloseBtn = Instance.new("TextButton", Header); CloseBtn.Size = UDim2.new(0,36,0,28); CloseBtn.Position = UDim2.new(1,-48,0,10); CloseBtn.Text = "✕"; CloseBtn.Font = Enum.Font.GothamBold; CloseBtn.TextSize = 18; CloseBtn.BackgroundTransparency = 0.4
+local closeCorner = Instance.new("UICorner", CloseBtn); closeCorner.CornerRadius = UDim.new(0,6)
 
--- Footer (for dragging by bottom)
-local Footer = Instance.new("Frame", Window); Footer.Name = "Footer"; Footer.Size = UDim2.new(1,0,0,28); Footer.Position = UDim2.new(0,0,1,-28); Footer.BackgroundTransparency = 1
-local FooterText = Instance.new("TextLabel", Footer); FooterText.Position = UDim2.new(0,12,0,4); FooterText.Size = UDim2.new(1,-24,1,-8); FooterText.BackgroundTransparency = 1; FooterText.Font = Enum.Font.Gotham; FooterText.TextSize = 12; FooterText.TextColor3 = Color3.fromRGB(200,200,200); FooterText.Text = "By Hikmes0"; FooterText.TextTransparency = 0.5
+-- Footer text
+local Footer = Instance.new("Frame", Window); Footer.Size = UDim2.new(1,0,0,24); Footer.Position = UDim2.new(0,0,1,-24); Footer.BackgroundTransparency = 1
+local FooterText = Instance.new("TextLabel", Footer); FooterText.Position = UDim2.new(0,12,0,2); FooterText.Size = UDim2.new(1,-24,1,-4); FooterText.BackgroundTransparency = 1; FooterText.Font = Enum.Font.Gotham; FooterText.TextSize = 12; FooterText.TextColor3 = Color3.fromRGB(255,255,255); FooterText.TextTransparency = 0.5; FooterText.Text = "By Hikmes0"
 
--- Left tabs column
-local TabsCol = Instance.new("Frame", Window)
-TabsCol.Name = "TabsCol"
-TabsCol.Size = UDim2.new(0,160,1,-92)
-TabsCol.Position = UDim2.new(0,12,0,60)
-TabsCol.BackgroundTransparency = 1
-local TabsBg = Instance.new("Frame", TabsCol); TabsBg.Size = UDim2.new(1,0,1,0); TabsBg.Position = UDim2.new(0,0,0,0); TabsBg.BackgroundColor3 = Color3.fromRGB(18,10,28); local tabsCorner = Instance.new("UICorner", TabsBg); tabsCorner.CornerRadius = UDim.new(0,10)
-local TabsLayout = Instance.new("UIListLayout", TabsBg); TabsLayout.Padding = UDim.new(0,8); TabsLayout.SortOrder = Enum.SortOrder.LayoutOrder; TabsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+-- Left tabs
+local TabsCol = Instance.new("Frame", Window); TabsCol.Size = UDim2.new(0,160,1,-88); TabsCol.Position = UDim2.new(0,12,0,60); TabsCol.BackgroundTransparency = 1
+local TabsBg = Instance.new("Frame", TabsCol); TabsBg.Size = UDim2.new(1,0,1,0); TabsBg.BackgroundColor3 = Color3.fromRGB(18,10,28); local tabsCorner = Instance.new("UICorner", TabsBg); tabsCorner.CornerRadius = UDim.new(0,10)
+local TabsList = Instance.new("UIListLayout", TabsBg); TabsList.Padding = UDim.new(0,8); TabsList.SortOrder = Enum.SortOrder.LayoutOrder; TabsList.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
--- Content area
-local Content = Instance.new("Frame", Window); Content.Name = "Content"; Content.Size = UDim2.new(1,-196,1,-92); Content.Position = UDim2.new(0,184,0,60); Content.BackgroundTransparency = 1
-local Pages = Instance.new("Folder", Content); Pages.Name = "Pages"
+-- Content
+local Content = Instance.new("Frame", Window); Content.Size = UDim2.new(1,-188,1,-88); Content.Position = UDim2.new(0,180,0,60); Content.BackgroundTransparency = 1
+local Pages = Instance.new("Folder", Content)
 
--- Resizer (bottom-right white square)
-local Resizer = Instance.new("Frame", Window); Resizer.Name = "Resizer"; Resizer.Size = UDim2.new(0,14,0,14); Resizer.Position = UDim2.new(1,-18,1,-18); Resizer.BackgroundColor3 = Color3.fromRGB(255,255,255); local rcorner = Instance.new("UICorner", Resizer); rcorner.CornerRadius = UDim.new(0,3)
+-- Resizer
+local Resizer = Instance.new("Frame", Window); Resizer.Size = UDim2.new(0,14,0,14); Resizer.Position = UDim2.new(1,-18,1,-18); Resizer.BackgroundColor3 = Color3.fromRGB(255,255,255); local resCorner = Instance.new("UICorner", Resizer); resCorner.CornerRadius = UDim.new(0,3)
 
--- Circular toggle button (movable)
-local ToggleBtn = Instance.new("TextButton", screenGui); ToggleBtn.Name = "ToggleBtn"; ToggleBtn.Size = UDim2.new(0,64,0,64); ToggleBtn.Position = UDim2.new(0,12,0.6,-32); ToggleBtn.AnchorPoint = Vector2.new(0,0.5); ToggleBtn.AutoButtonColor = false
-ToggleBtn.Font = Enum.Font.GothamBold; ToggleBtn.TextSize = 28; ToggleBtn.Text = THEMES[SETTINGS.Theme].symbol; ToggleBtn.BackgroundColor3 = THEMES[SETTINGS.Theme].button
-local toggleCorner = Instance.new("UICorner", ToggleBtn); toggleCorner.CornerRadius = UDim.new(1,0)
-local toggleSpark = Instance.new("Frame", ToggleBtn); toggleSpark.Size = UDim2.new(0,14,0,14); toggleSpark.Position = UDim2.new(1,-20,0,6); toggleSpark.BackgroundColor3 = Color3.fromRGB(255,235,120); local tsC = Instance.new("UICorner", toggleSpark); tsC.CornerRadius = UDim.new(1,0)
+-- Toggle circular button
+local ToggleBtn = Instance.new("TextButton", screenGui); ToggleBtn.Size = UDim2.new(0,64,0,64); ToggleBtn.Position = UDim2.new(0,12,0.6,-32); ToggleBtn.AnchorPoint = Vector2.new(0,0.5); ToggleBtn.Font = Enum.Font.GothamBold; ToggleBtn.TextSize = 28; ToggleBtn.Text = THEMES[SETTINGS.Theme].symbol; ToggleBtn.BackgroundColor3 = THEMES[SETTINGS.Theme].button; local tCorner = Instance.new("UICorner", ToggleBtn); tCorner.CornerRadius = UDim.new(1,0)
+local toggleSpark = Instance.new("Frame", ToggleBtn); toggleSpark.Size = UDim2.new(0,14,0,14); toggleSpark.Position = UDim2.new(1,-20,0,6); toggleSpark.BackgroundColor3 = Color3.fromRGB(255,235,120); local spc = Instance.new("UICorner", toggleSpark); spc.CornerRadius = UDim.new(1,0)
 
--- Tab creation
+-- Tabs/buttons creation
 local TAB_ORDER = {"Main","Base","Universal","Profiles","Settings"}
 local TabButtons = {}
 local PageFrames = {}
 
 local function createTab(name)
     local btn = Instance.new("TextButton", TabsBg)
-    btn.Name = name.."_Tab"
-    btn.Size = UDim2.new(1,-16,0,40)
-    btn.Position = UDim2.new(0,8,0,0)
-    btn.BackgroundTransparency = 1
-    btn.Font = Enum.Font.GothamSemibold
-    btn.TextSize = 14
-    btn.TextColor3 = Color3.fromRGB(220,220,220)
-    btn.Text = name
-    btn.AutoButtonColor = false
+    btn.Size = UDim2.new(1,-16,0,40); btn.BackgroundTransparency = 1; btn.Font = Enum.Font.GothamSemibold; btn.TextSize = 14; btn.TextColor3 = Color3.fromRGB(220,220,220)
+    btn.Text = name; btn.AutoButtonColor = false
     local c = Instance.new("UICorner", btn); c.CornerRadius = UDim.new(0,8)
-
-    local page = Instance.new("Frame", Pages)
-    page.Name = name.."_Page"
-    page.Size = UDim2.new(1,0,1,0)
-    page.BackgroundTransparency = 1
-    page.Visible = false
+    local page = Instance.new("Frame", Pages); page.Size = UDim2.new(1,0,1,0); page.BackgroundTransparency = 1; page.Visible = false
 
     TabButtons[name] = btn
     PageFrames[name] = page
@@ -297,65 +264,153 @@ local function createTab(name)
         page.Visible = true
         for _,b in pairs(TabButtons) do b.TextColor3 = Color3.fromRGB(200,200,200) end
         btn.TextColor3 = Color3.fromRGB(255,255,255)
-        showToast( (L[SETTINGS.Language].toast_base and string.format(L[SETTINGS.Language].toast_tab or "Opened: %s", name)) or ("Opened: "..name) )
+        showToast( string.format(LANG[SETTINGS.Language].toast_base or "Opened: %s", name) )
     end)
     return btn, page
 end
 
 for _,n in ipairs(TAB_ORDER) do createTab(n) end
 
--- ===== MAIN PAGE CONTENT =====
-do
-    local page = PageFrames["Main"]
-    local header = Instance.new("TextLabel", page); header.Size = UDim2.new(1,-24,0,28); header.Position = UDim2.new(0,12,0,6); header.BackgroundTransparency = 1; header.Font = Enum.Font.GothamBold; header.TextSize = 18; header.TextColor3 = Color3.fromRGB(245,245,245); header.Text = L[SETTINGS.Language].tabs[1]
-    local execLabel = Instance.new("TextLabel", page); execLabel.Name = "ExecLabel"; execLabel.Size = UDim2.new(1,-24,0,20); execLabel.Position = UDim2.new(0,12,0,36); execLabel.BackgroundTransparency = 1; execLabel.Font = Enum.Font.Gotham; execLabel.TextSize = 14; execLabel.TextColor3 = Color3.fromRGB(210,210,210); execLabel.TextXAlignment = Enum.TextXAlignment.Left
-    execLabel.Text = string.format(L[SETTINGS.Language].executor, SETTINGS.SelectedBase)
+-- Helper: localized text function
+local function loc(key)
+    local lang = SETTINGS.Language or DEFAULT_LANG
+    return LANG[lang][key] or LANG[DEFAULT_LANG][key] or key
+end
 
-    local codeBox = Instance.new("TextBox", page); codeBox.Name = "CodeBox"; codeBox.Position = UDim2.new(0,12,0,66); codeBox.Size = UDim2.new(1,-24,0.62,-66); codeBox.BackgroundColor3 = Color3.fromRGB(28,14,40); codeBox.TextColor3 = Color3.fromRGB(240,240,240); codeBox.Font = Enum.Font.Code; codeBox.TextSize = 14; codeBox.TextWrapped = true; codeBox.MultiLine = true; codeBox.ClearTextOnFocus = false; codeBox.PlaceholderText = (SETTINGS.Language == "RU" and L.RU.placeholder or L.EN.placeholder)
-    local cbCorner = Instance.new("UICorner", codeBox); cbCorner.CornerRadius = UDim.new(0,8)
-
-    local execBtn = Instance.new("TextButton", page); execBtn.Name = "ExecBtn"; execBtn.Size = UDim2.new(0,140,0,40); execBtn.Position = UDim2.new(0.5,-70,0.86,0); execBtn.AnchorPoint = Vector2.new(0.5,0); execBtn.Font = Enum.Font.GothamBold; execBtn.TextSize = 16; execBtn.Text = (SETTINGS.Language == "RU" and L.RU.execute or L.EN.execute); execBtn.BackgroundColor3 = THEMES[SETTINGS.Theme].accent; execBtn.TextColor3 = Color3.fromRGB(255,255,255); local ebCorner = Instance.new("UICorner", execBtn); ebCorner.CornerRadius = UDim.new(0,8)
-
-    local execDebounce = false
-    execBtn.MouseButton1Click:Connect(function()
-        if execDebounce then return end
-        execDebounce = true
-        local code = codeBox.Text or ""
-        local execFn = EXECUTORS[SETTINGS.SelectedBase]
-        local ok, res = false, nil
-        if type(execFn) == "function" then
-            ok, res = pcall(function() return execFn(code) end)
-        end
-        if not ok or res == false then
-            -- fallback loadstring
-            local ok2, err2 = pcall(function() if loadstring then loadstring(code)() end end)
-            if not ok2 then
-                showToast(string.format(L[SETTINGS.Language].toast_executed or "Error: %s", tostring(err2)))
-            else
-                showToast(string.format(L[SETTINGS.Language].toast_executed, SETTINGS.SelectedBase))
-            end
-        else
-            showToast(string.format(L[SETTINGS.Language].toast_executed, SETTINGS.SelectedBase))
-        end
-        if SETTINGS.SFX then pcall(function() local s = SFX:FindFirstChild("click"); if s then s:Play() end end) end
-        task.delay(0.5, function() execDebounce = false end)
-    end)
-
-    -- make placeholder / text respond to language change later
-    codeBox:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
-        local w = codeBox.AbsoluteSize.X
-        local size = math.clamp(math.floor(w / 40), 12, 18)
-        pcall(function() codeBox.TextSize = size end)
+-- Toast function (small)
+function showToast(text)
+    local toast = Instance.new("Frame", screenGui); toast.Size = UDim2.new(0,260,0,44); toast.Position = UDim2.new(1,-280,1,-60); toast.BackgroundColor3 = Color3.fromRGB(28,28,28); local tC = Instance.new("UICorner", toast); tC.CornerRadius = UDim.new(0,8)
+    local label = Instance.new("TextLabel", toast); label.Size = UDim2.new(1,-12,1,-12); label.Position = UDim2.new(0,6,0,6); label.BackgroundTransparency = 1; label.Font = Enum.Font.GothamBold; label.TextSize = 14; label.TextColor3 = Color3.fromRGB(255,255,255); label.Text = text; label.TextXAlignment = Enum.TextXAlignment.Left
+    TweenService:Create(toast, TweenInfo.new(0.35, Enum.EasingStyle.Quad), {Position = UDim2.new(1,-280,1,-120)}):Play()
+    task.delay(3, function()
+        TweenService:Create(label, TweenInfo.new(0.28), {TextTransparency = 1}):Play()
+        TweenService:Create(toast, TweenInfo.new(0.28), {BackgroundTransparency = 1}):Play()
+        task.delay(0.32, function() pcall(function() toast:Destroy() end) end)
     end)
 end
 
--- ===== BASE PAGE CONTENT =====
+-- Apply theme & build SFX
+local function rebuildSFX(themeKey)
+    for _,c in pairs(SFXFolder:GetChildren()) do pcall(function() c:Destroy() end) end
+    local t = THEMES[themeKey]
+    if not t or not t.sfx then return end
+    createSFX(t.sfx.open, "open")
+    createSFX(t.sfx.close, "close")
+    createSFX(t.sfx.click, "click")
+end
+
+local function applyTheme(themeKey)
+    local t = THEMES[themeKey] or THEMES.Default
+    Window.BackgroundColor3 = t.window
+    winStroke.Color = t.accent
+    ToggleBtn.BackgroundColor3 = t.button
+    ToggleBtn.Text = t.symbol
+    local execBtn = PageFrames["Main"] and PageFrames["Main"]:FindFirstChild("ExecBtn")
+    if execBtn then execBtn.BackgroundColor3 = t.accent end
+    rebuildSFX(themeKey)
+    if SETTINGS.SFX then pcall(function() local s = SFXFolder:FindFirstChild("open"); if s then s:Play() end end) end
+end
+
+-- Refresh language dependent texts
+local function refreshTexts()
+    local lang = SETTINGS.Language or DEFAULT_LANG
+    for i,name in ipairs(TAB_ORDER) do
+        local btn = TabButtons[name]
+        if btn then btn.Text = LANG[lang].tabs[i] or name end
+    end
+    local codeBox = PageFrames["Main"] and PageFrames["Main"]:FindFirstChild("CodeBox")
+    if codeBox then codeBox.PlaceholderText = LANG[lang].placeholder end
+    local execBtn = PageFrames["Main"] and PageFrames["Main"]:FindFirstChild("ExecBtn")
+    if execBtn then execBtn.Text = LANG[lang].execute end
+    local execLabel = PageFrames["Main"] and PageFrames["Main"]:FindFirstChild("ExecLabel")
+    if execLabel then execLabel.Text = string.format(LANG[lang].executor, SETTINGS.SelectedBase) end
+
+    -- profiles names update
+    local idx = 1
+    for _,frame in ipairs(PageFrames["Profiles"]:GetChildren()) do
+        if frame:IsA("Frame") then
+            local label = frame:FindFirstChildWhichIsA("TextLabel")
+            if label then
+                label.Text = (PROFILES[idx] and PROFILES[idx].Name) or LANG[lang].empty
+            end
+            idx = idx + 1
+            if idx > MAX_PROFILES then break end
+        end
+    end
+end
+
+-- ========== Build page contents ==========
+
+-- MAIN
+do
+    local page = PageFrames["Main"]
+    local header = Instance.new("TextLabel", page); header.Size = UDim2.new(1,-24,0,28); header.Position = UDim2.new(0,12,0,6); header.BackgroundTransparency = 1; header.Font = Enum.Font.GothamBold; header.TextSize = 18; header.TextColor3 = Color3.fromRGB(245,245,245); header.Text = loc("tabs")[1] or "Main"
+    local execLabel = Instance.new("TextLabel", page); execLabel.Name = "ExecLabel"; execLabel.Size = UDim2.new(1,-24,0,20); execLabel.Position = UDim2.new(0,12,0,36); execLabel.BackgroundTransparency = 1; execLabel.Font = Enum.Font.Gotham; execLabel.TextSize = 14; execLabel.TextColor3 = Color3.fromRGB(210,210,210); execLabel.Text = string.format(LANG[SETTINGS.Language].executor, SETTINGS.SelectedBase)
+    local codeBox = Instance.new("TextBox", page); codeBox.Name = "CodeBox"; codeBox.Position = UDim2.new(0,12,0,66); codeBox.Size = UDim2.new(1,-24,0.62,-66); codeBox.BackgroundColor3 = Color3.fromRGB(28,14,40); codeBox.TextColor3 = Color3.fromRGB(240,240,240); codeBox.Font = Enum.Font.Code; codeBox.TextSize = 14; codeBox.TextWrapped = true; codeBox.MultiLine = true; codeBox.ClearTextOnFocus = false; codeBox.PlaceholderText = LANG[SETTINGS.Language].placeholder
+    local cbCorner = Instance.new("UICorner", codeBox); cbCorner.CornerRadius = UDim.new(0,8)
+
+    -- Quick utilities: Clear, Beautify, Delay input, Execute
+    local clearBtn = Instance.new("TextButton", page); clearBtn.Size = UDim2.new(0,84,0,32); clearBtn.Position = UDim2.new(0,12,1,-44); clearBtn.Text = loc("clear") or "Clear"; local cCor = Instance.new("UICorner", clearBtn); cCor.CornerRadius = UDim.new(0,6)
+    local beautBtn = Instance.new("TextButton", page); beautBtn.Size = UDim2.new(0,84,0,32); beautBtn.Position = UDim2.new(0,108,1,-44); beautBtn.Text = loc("beautify") or "Beautify"; local bCor = Instance.new("UICorner", beautBtn); bCor.CornerRadius = UDim.new(0,6)
+    local delayBox = Instance.new("TextBox", page); delayBox.Size = UDim2.new(0,84,0,32); delayBox.Position = UDim2.new(1,-200,1,-44); delayBox.PlaceholderText = "0"; delayBox.Text = ""; delayBox.Font = Enum.Font.Gotham; local dbCor = Instance.new("UICorner", delayBox); dbCor.CornerRadius = UDim.new(0,6)
+    local delayLbl = Instance.new("TextLabel", page); delayLbl.Position = UDim2.new(1,-268,1,-40); delayLbl.Size = UDim2.new(0,60,0,24); delayLbl.BackgroundTransparency = 1; delayLbl.Font = Enum.Font.Gotham; delayLbl.TextColor3 = Color3.fromRGB(220,220,220); delayLbl.Text = loc("delay")
+
+    local execBtn = Instance.new("TextButton", page); execBtn.Name = "ExecBtn"; execBtn.Size = UDim2.new(0,140,0,40); execBtn.Position = UDim2.new(0.5,-70,0.86,0); execBtn.AnchorPoint = Vector2.new(0.5,0); execBtn.Font = Enum.Font.GothamBold; execBtn.TextSize = 16; execBtn.Text = LANG[SETTINGS.Language].execute; execBtn.BackgroundColor3 = THEMES[SETTINGS.Theme].accent; execBtn.TextColor3 = Color3.fromRGB(255,255,255); local ebCorner = Instance.new("UICorner", execBtn); ebCorner.CornerRadius = UDim.new(0,8)
+
+    -- Quick presets area
+    local presetsLabel = Instance.new("TextLabel", page); presetsLabel.Position = UDim2.new(0,12,0.72,0); presetsLabel.Size = UDim2.new(0,140,0,20); presetsLabel.BackgroundTransparency = 1; presetsLabel.Font = Enum.Font.Gotham; presetsLabel.Text = "Presets"
+
+    local preset1 = Instance.new("TextButton", page); preset1.Size = UDim2.new(0,120,0,28); preset1.Position = UDim2.new(0,160,0.72,0); preset1.Text = "print('Hi')"; local p1c = Instance.new("UICorner", preset1); p1c.CornerRadius = UDim.new(0,6)
+    preset1.MouseButton1Click:Connect(function() codeBox.Text = "print('Hello from Fog Hub')\n" end)
+
+    -- Beautify: simple trimming and consistent newlines
+    beautBtn.MouseButton1Click:Connect(function()
+        local txt = codeBox.Text or ""
+        -- remove trailing spaces, ensure newline at EOF, collapse multiple blank lines
+        txt = txt:gsub("[ \t]+(\n)","%1")
+        txt = txt:gsub("\r","")
+        txt = txt:gsub("\n%s*\n","\n\n")
+        if not txt:match("\n$") then txt = txt.."\n" end
+        codeBox.Text = txt
+        showToast("Formatted")
+    end)
+
+    clearBtn.MouseButton1Click:Connect(function()
+        codeBox.Text = ""
+        showToast(loc("clear"))
+    end)
+
+    -- Execute with optional delay
+    execBtn.MouseButton1Click:Connect(function()
+        local code = codeBox.Text or ""
+        local delaySec = tonumber(delayBox.Text) or 0
+        local function run()
+            local fn = EXECUTORS[SETTINGS.SelectedBase]
+            local ok, res
+            if type(fn) == "function" then ok, res = pcall(function() return fn(code) end) end
+            if not ok or res == false then
+                local ok2, err2 = pcall(function() if loadstring then loadstring(code)() end end)
+                if not ok2 then showToast("Execute error: "..tostring(err2)) else showToast(string.format(LANG[SETTINGS.Language].toast_executed, SETTINGS.SelectedBase)) end
+            else
+                showToast(string.format(LANG[SETTINGS.Language].toast_executed, SETTINGS.SelectedBase))
+            end
+            if SETTINGS.SFX then pcall(function() local s = SFXFolder:FindFirstChild("click"); if s then s:Play() end end) end
+        end
+        if delaySec > 0 then
+            showToast("Executing in "..tostring(delaySec).."s")
+            spawn(function() task.wait(delaySec); run() end)
+        else
+            run()
+        end
+    end)
+end
+
+-- BASE page
 do
     local page = PageFrames["Base"]
-    local header = Instance.new("TextLabel", page); header.Size = UDim2.new(1,-24,0,28); header.Position = UDim2.new(0,12,0,6); header.BackgroundTransparency = 1; header.Font = Enum.Font.GothamBold; header.TextSize = 18; header.TextColor3 = Color3.fromRGB(245,245,245); header.Text = L[SETTINGS.Language].tabs[2]
+    local header = Instance.new("TextLabel", page); header.Size = UDim2.new(1,-24,0,28); header.Position = UDim2.new(0,12,0,6); header.BackgroundTransparency = 1; header.Font = Enum.Font.GothamBold; header.TextSize = 18; header.TextColor3 = Color3.fromRGB(245,245,245); header.Text = loc("tabs")[2]
     local scroll = Instance.new("ScrollingFrame", page); scroll.Position = UDim2.new(0,12,0,44); scroll.Size = UDim2.new(1,-24,1,-56); scroll.BackgroundTransparency = 1; scroll.ScrollBarThickness = 8
     local layout = Instance.new("UIListLayout", scroll); layout.SortOrder = Enum.SortOrder.LayoutOrder; layout.Padding = UDim.new(0,8)
-
     for i,b in ipairs(BASES) do
         local btn = Instance.new("TextButton", scroll); btn.Size = UDim2.new(1,-12,0,40); btn.Position = UDim2.new(0,6,0,(i-1)*48); btn.BackgroundColor3 = Color3.fromRGB(28,12,36); btn.Font = Enum.Font.Gotham; btn.TextSize = 14; btn.TextColor3 = Color3.fromRGB(235,235,235); btn.Text = b
         local bc = Instance.new("UICorner", btn); bc.CornerRadius = UDim.new(0,8)
@@ -363,9 +418,9 @@ do
             SETTINGS.SelectedBase = b
             persistSettings()
             local mainExecLabel = PageFrames["Main"]:FindFirstChild("ExecLabel")
-            if mainExecLabel then mainExecLabel.Text = string.format(L[SETTINGS.Language].executor, b) end
-            showToast(string.format(L[SETTINGS.Language].toast_base, b))
-            if SETTINGS.SFX then pcall(function() local s = SFX:FindFirstChild("click"); if s then s:Play() end end) end
+            if mainExecLabel then mainExecLabel.Text = string.format(LANG[SETTINGS.Language].executor, b) end
+            showToast(string.format(LANG[SETTINGS.Language].toast_base, b))
+            if SETTINGS.SFX then pcall(function() local s = SFXFolder:FindFirstChild("click"); if s then s:Play() end end) end
             TweenService:Create(btn, TweenInfo.new(0.12), {BackgroundColor3 = THEMES[SETTINGS.Theme].accent}):Play()
             task.delay(0.12, function() TweenService:Create(btn, TweenInfo.new(0.12), {BackgroundColor3 = Color3.fromRGB(28,12,36)}):Play() end)
         end)
@@ -373,37 +428,36 @@ do
     layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() scroll.CanvasSize = UDim2.new(0,0,0, layout.AbsoluteContentSize.Y + 12) end)
 end
 
--- ===== UNIVERSAL PAGE =====
+-- UNIVERSAL page (Infinite Yield)
 do
     local page = PageFrames["Universal"]
-    local header = Instance.new("TextLabel", page); header.Size = UDim2.new(1,-24,0,28); header.Position = UDim2.new(0,12,0,6); header.BackgroundTransparency = 1; header.Font = Enum.Font.GothamBold; header.TextSize = 18; header.TextColor3 = Color3.fromRGB(245,245,245); header.Text = L[SETTINGS.Language].tabs[3]
-    local infBtn = Instance.new("TextButton", page); infBtn.Size = UDim2.new(0.46,0,0,40); infBtn.Position = UDim2.new(0.27,0,0.18,0); infBtn.Text = L[SETTINGS.Language].infinite; infBtn.Font = Enum.Font.GothamBold; infBtn.TextSize = 16; infBtn.BackgroundColor3 = Color3.fromRGB(0,120,200); local ic = Instance.new("UICorner", infBtn); ic.CornerRadius = UDim.new(0,8)
+    local header = Instance.new("TextLabel", page); header.Size = UDim2.new(1,-24,0,28); header.Position = UDim2.new(0,12,0,6); header.BackgroundTransparency = 1; header.Font = Enum.Font.GothamBold; header.TextSize = 18; header.TextColor3 = Color3.fromRGB(245,245,245); header.Text = loc("tabs")[3]
+    local infBtn = Instance.new("TextButton", page); infBtn.Size = UDim2.new(0.46,0,0,40); infBtn.Position = UDim2.new(0.27,0,0.18,0); infBtn.Text = loc("infinite"); infBtn.Font = Enum.Font.GothamBold; infBtn.TextSize = 16; infBtn.BackgroundColor3 = Color3.fromRGB(0,120,200); local ic = Instance.new("UICorner", infBtn); ic.CornerRadius = UDim.new(0,8)
     infBtn.MouseButton1Click:Connect(function()
-        local ok,err = pcall(function()
+        local ok, err = pcall(function()
             local src = game:HttpGet("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source")
             loadstring(src)()
         end)
-        if ok then showToast(L[SETTINGS.Language].toast_inf or L[SETTINGS.Language].infinite) else showToast("Error: "..tostring(err)) end
+        if ok then showToast("Infinite Yield started") else showToast("Error: "..tostring(err)) end
     end)
 end
 
--- ===== PROFILES PAGE =====
+-- PROFILES page
 do
     local page = PageFrames["Profiles"]
-    local header = Instance.new("TextLabel", page); header.Size = UDim2.new(1,-24,0,28); header.Position = UDim2.new(0,12,0,6); header.BackgroundTransparency = 1; header.Font = Enum.Font.GothamBold; header.TextSize = 18; header.TextColor3 = Color3.fromRGB(245,245,245); header.Text = L[SETTINGS.Language].tabs[4]
+    local header = Instance.new("TextLabel", page); header.Size = UDim2.new(1,-24,0,28); header.Position = UDim2.new(0,12,0,6); header.BackgroundTransparency = 1; header.Font = Enum.Font.GothamBold; header.TextSize = 18; header.TextColor3 = Color3.fromRGB(245,245,245); header.Text = loc("tabs")[4]
     local frame = Instance.new("Frame", page); frame.Position = UDim2.new(0,12,0,44); frame.Size = UDim2.new(1,-24,1,-56); frame.BackgroundTransparency = 1
     local layout = Instance.new("UIListLayout", frame); layout.Padding = UDim.new(0,8)
 
-    local slotUI = {}
-    for i=1,MAX_SLOTS do
+    for i=1,MAX_PROFILES do
         local slot = Instance.new("Frame", frame); slot.Size = UDim2.new(1,0,0,84); slot.BackgroundColor3 = Color3.fromRGB(24,10,30); local sc = Instance.new("UICorner", slot); sc.CornerRadius = UDim.new(0,8)
         local nameLbl = Instance.new("TextLabel", slot); nameLbl.Position = UDim2.new(0,12,0,8); nameLbl.Size = UDim2.new(0.5,-24,0,24); nameLbl.BackgroundTransparency = 1; nameLbl.Font = Enum.Font.GothamBold; nameLbl.TextSize = 16; nameLbl.TextColor3 = Color3.fromRGB(235,235,235)
-        nameLbl.Text = (PROFILES[i] and PROFILES[i].Name) or L[SETTINGS.Language].empty
+        nameLbl.Text = (PROFILES[i] and PROFILES[i].Name) or LANG[SETTINGS.Language].empty
 
-        local btnRename = Instance.new("TextButton", slot); btnRename.Size = UDim2.new(0,84,0,28); btnRename.Position = UDim2.new(1,-96,0,8); btnRename.Text = L[SETTINGS.Language].rename; local ruc=Instance.new("UICorner", btnRename); ruc.CornerRadius = UDim.new(0,6)
-        local btnSave = Instance.new("TextButton", slot); btnSave.Size = UDim2.new(0,84,0,28); btnSave.Position = UDim2.new(1,-96,0,44); btnSave.Text = L[SETTINGS.Language].save; local sc2=Instance.new("UICorner", btnSave); sc2.CornerRadius = UDim.new(0,6)
-        local btnLoad = Instance.new("TextButton", slot); btnLoad.Size = UDim2.new(0,84,0,28); btnLoad.Position = UDim2.new(1,-186,0,44); btnLoad.Text = L[SETTINGS.Language].load; local lc=Instance.new("UICorner", btnLoad); lc.CornerRadius = UDim.new(0,6)
-        local btnDelete = Instance.new("TextButton", slot); btnDelete.Size = UDim2.new(0,84,0,28); btnDelete.Position = UDim2.new(1,-276,0,44); btnDelete.Text = L[SETTINGS.Language].delete; local dc=Instance.new("UICorner", btnDelete); dc.CornerRadius = UDim.new(0,6)
+        local btnRename = Instance.new("TextButton", slot); btnRename.Size = UDim2.new(0,84,0,28); btnRename.Position = UDim2.new(1,-96,0,8); btnRename.Text = "Rename"; local ruc = Instance.new("UICorner", btnRename); ruc.CornerRadius = UDim.new(0,6)
+        local btnSave = Instance.new("TextButton", slot); btnSave.Size = UDim2.new(0,84,0,28); btnSave.Position = UDim2.new(1,-96,0,44); btnSave.Text = "Save"; local sc2 = Instance.new("UICorner", btnSave); sc2.CornerRadius = UDim.new(0,6)
+        local btnLoad = Instance.new("TextButton", slot); btnLoad.Size = UDim2.new(0,84,0,28); btnLoad.Position = UDim2.new(1,-186,0,44); btnLoad.Text = "Load"; local lc = Instance.new("UICorner", btnLoad); lc.CornerRadius = UDim.new(0,6)
+        local btnDelete = Instance.new("TextButton", slot); btnDelete.Size = UDim2.new(0,84,0,28); btnDelete.Position = UDim2.new(1,-276,0,44); btnDelete.Text = "Delete"; local dc = Instance.new("UICorner", btnDelete); dc.CornerRadius = UDim.new(0,6)
 
         btnSave.MouseButton1Click:Connect(function()
             local prof = {
@@ -418,12 +472,12 @@ do
             PROFILES[i] = prof
             nameLbl.Text = prof.Name
             persistProfiles()
-            showToast(L[SETTINGS.Language].toast_saved)
+            showToast(LANG[SETTINGS.Language].toast_saved)
         end)
 
         btnLoad.MouseButton1Click:Connect(function()
             local prof = PROFILES[i]
-            if not prof then showToast(L[SETTINGS.Language].empty); return end
+            if not prof then showToast(LANG[SETTINGS.Language].empty); return end
             SETTINGS.Theme = prof.Theme or SETTINGS.Theme
             SETTINGS.Language = prof.Language or SETTINGS.Language
             if type(prof.Position) == "table" and #prof.Position >= 4 then Window.Position = UDim2.new(prof.Position[1], prof.Position[2], prof.Position[3], prof.Position[4]) end
@@ -433,18 +487,18 @@ do
             applyTheme(SETTINGS.Theme)
             refreshTexts()
             persistSettings()
-            showToast(L[SETTINGS.Language].toast_loaded_profile)
+            showToast(LANG[SETTINGS.Language].toast_loaded_profile)
         end)
 
         btnDelete.MouseButton1Click:Connect(function()
             PROFILES[i] = nil
-            nameLbl.Text = L[SETTINGS.Language].empty
+            nameLbl.Text = LANG[SETTINGS.Language].empty
             persistProfiles()
-            showToast(L[SETTINGS.Language].toast_deleted)
+            showToast(LANG[SETTINGS.Language].toast_deleted)
         end)
 
         btnRename.MouseButton1Click:Connect(function()
-            local modal = Instance.new("Frame", screenGui); modal.Size = UDim2.new(0,380,0,100); modal.Position = UDim2.new(0.5,-190,0.5,-50); modal.BackgroundColor3 = Color3.fromRGB(18,12,28); modal.ZIndex = 999
+            local modal = Instance.new("Frame", screenGui); modal.Size = UDim2.new(0,360,0,100); modal.Position = UDim2.new(0.5,-180,0.5,-50); modal.BackgroundColor3 = Color3.fromRGB(18,12,28)
             local mc = Instance.new("UICorner", modal); mc.CornerRadius = UDim.new(0,8)
             local tb = Instance.new("TextBox", modal); tb.Size = UDim2.new(1,-24,0,36); tb.Position = UDim2.new(0,12,0,12); tb.Text = (PROFILES[i] and PROFILES[i].Name) or ("Profile "..i); tb.Font = Enum.Font.Gotham; tb.TextSize = 16
             local ok = Instance.new("TextButton", modal); ok.Size = UDim2.new(0,84,0,32); ok.Position = UDim2.new(1,-96,1,-44); ok.Text = "OK"; local okc = Instance.new("UICorner", ok); okc.CornerRadius = UDim.new(0,6)
@@ -459,19 +513,17 @@ do
             end)
             cancel.MouseButton1Click:Connect(function() modal:Destroy() end)
         end)
-
-        slotUI[i] = {frame = slot, nameLbl = nameLbl}
     end
     layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() frame.CanvasSize = UDim2.new(0,0,0, layout.AbsoluteContentSize.Y + 12) end)
 end
 
--- ===== SETTINGS PAGE =====
+-- SETTINGS page
 do
     local page = PageFrames["Settings"]
-    local header = Instance.new("TextLabel", page); header.Size = UDim2.new(1,-24,0,28); header.Position = UDim2.new(0,12,0,6); header.BackgroundTransparency = 1; header.Font = Enum.Font.GothamBold; header.TextSize = 18; header.TextColor3 = Color3.fromRGB(245,245,245); header.Text = L[SETTINGS.Language].tabs[5]
-    local themeLabel = Instance.new("TextLabel", page); themeLabel.Position = UDim2.new(0,12,0,44); themeLabel.Size = UDim2.new(1,-24,0,20); themeLabel.BackgroundTransparency = 1; themeLabel.Font = Enum.Font.Gotham; themeLabel.TextSize = 14; themeLabel.TextColor3 = Color3.fromRGB(220,220,220); themeLabel.Text = "Themes"
-
+    local header = Instance.new("TextLabel", page); header.Size = UDim2.new(1,-24,0,28); header.Position = UDim2.new(0,12,0,6); header.BackgroundTransparency = 1; header.Font = Enum.Font.GothamBold; header.TextSize = 18; header.TextColor3 = Color3.fromRGB(245,245,245); header.Text = loc("tabs")[5]
+    local themeLabel = Instance.new("TextLabel", page); themeLabel.Position = UDim2.new(0,12,0,44); themeLabel.Size = UDim2.new(1,-24,0,20); themeLabel.BackgroundTransparency = 1; themeLabel.Font = Enum.Font.Gotham; themeLabel.TextColor3 = Color3.fromRGB(220,220,220); themeLabel.Text = "Themes"
     local themeFrame = Instance.new("Frame", page); themeFrame.Position = UDim2.new(0,12,0,70); themeFrame.Size = UDim2.new(1,-24,0,64); themeFrame.BackgroundTransparency = 1
+
     local idx = 0
     for key, dat in pairs(THEMES) do
         idx = idx + 1
@@ -484,22 +536,12 @@ do
         end)
     end
 
-    -- language
+    -- Language buttons
     local langLabel = Instance.new("TextLabel", page); langLabel.Position = UDim2.new(0,12,0,150); langLabel.Size = UDim2.new(0,120,0,24); langLabel.BackgroundTransparency = 1; langLabel.Font = Enum.Font.Gotham; langLabel.TextColor3 = Color3.fromRGB(220,220,220); langLabel.Text = "Language"
     local ru = Instance.new("TextButton", page); ru.Size = UDim2.new(0,48,0,28); ru.Position = UDim2.new(0,140,0,148); ru.Text="🇷🇺"; local ruc = Instance.new("UICorner", ru); ruc.CornerRadius = UDim.new(0,6)
     local en = Instance.new("TextButton", page); en.Size = UDim2.new(0,48,0,28); en.Position = UDim2.new(0,200,0,148); en.Text="🇺🇸"; local enc = Instance.new("UICorner", en); enc.CornerRadius = UDim.new(0,6)
-    ru.MouseButton1Click:Connect(function()
-        SETTINGS.Language = "RU"
-        persistSettings()
-        refreshTexts()
-        showToast("Language: RU")
-    end)
-    en.MouseButton1Click:Connect(function()
-        SETTINGS.Language = "EN"
-        persistSettings()
-        refreshTexts()
-        showToast("Language: EN")
-    end)
+    ru.MouseButton1Click:Connect(function() SETTINGS.Language = "RU"; persistSettings(); refreshTexts(); showToast("Language: RU") end)
+    en.MouseButton1Click:Connect(function() SETTINGS.Language = "EN"; persistSettings(); refreshTexts(); showToast("Language: EN") end)
 
     -- SFX toggle
     local sfxLabel = Instance.new("TextLabel", page); sfxLabel.Position = UDim2.new(0,260,0,150); sfxLabel.Size = UDim2.new(0,60,0,24); sfxLabel.BackgroundTransparency = 1; sfxLabel.Font=Enum.Font.Gotham; sfxLabel.TextColor3=Color3.fromRGB(220,220,220); sfxLabel.Text="SFX"
@@ -507,9 +549,8 @@ do
     sfxBtn.MouseButton1Click:Connect(function() SETTINGS.SFX = not SETTINGS.SFX; sfxBtn.Text = (SETTINGS.SFX and "ON" or "OFF"); persistSettings() end)
 
     -- Export / Import
-    local exportBtn = Instance.new("TextButton", page); exportBtn.Size = UDim2.new(0,100,0,30); exportBtn.Position = UDim2.new(1,-236,1,-44); exportBtn.AnchorPoint = Vector2.new(0,1); exportBtn.Text = L[SETTINGS.Language].export
-    local importBtn = Instance.new("TextButton", page); importBtn.Size = UDim2.new(0,100,0,30); importBtn.Position = UDim2.new(1,-120,1,-44); importBtn.AnchorPoint = Vector2.new(0,1); importBtn.Text = L[SETTINGS.Language].import
-
+    local exportBtn = Instance.new("TextButton", page); exportBtn.Size = UDim2.new(0,100,0,30); exportBtn.Position = UDim2.new(1,-236,1,-44); exportBtn.AnchorPoint = Vector2.new(0,1); exportBtn.Text = loc("export")
+    local importBtn = Instance.new("TextButton", page); importBtn.Size = UDim2.new(0,100,0,30); importBtn.Position = UDim2.new(1,-120,1,-44); importBtn.AnchorPoint = Vector2.new(0,1); importBtn.Text = loc("import")
     exportBtn.MouseButton1Click:Connect(function()
         local s = safeEncode(PROFILES)
         if s then
@@ -521,7 +562,6 @@ do
             showToast("Export error")
         end
     end)
-
     importBtn.MouseButton1Click:Connect(function()
         local modal = Instance.new("Frame", screenGui); modal.Size = UDim2.new(0,540,0,220); modal.Position = UDim2.new(0.5,-270,0.5,-110); modal.BackgroundColor3 = Color3.fromRGB(18,12,28); local mc = Instance.new("UICorner", modal); mc.CornerRadius = UDim.new(0,8)
         local tb = Instance.new("TextBox", modal); tb.Size = UDim2.new(1,-24,1,-64); tb.Position = UDim2.new(0,12,0,12); tb.PlaceholderText = "Paste profiles JSON here"; tb.MultiLine = true; tb.Font = Enum.Font.Code; tb.TextSize = 14
@@ -531,7 +571,7 @@ do
             local s = tb.Text
             local t = safeDecode(s)
             if type(t) == "table" then
-                for i=1,MAX_SLOTS do PROFILES[i] = t[i] end
+                for i=1,MAX_PROFILES do PROFILES[i] = t[i] end
                 persistProfiles()
                 refreshTexts()
                 showToast("Profiles imported")
@@ -544,81 +584,19 @@ do
     end)
 end
 
--- ===== helper: showToast (localized) =====
-function showToast(text)
-    local toast = Instance.new("Frame", screenGui); toast.Size = UDim2.new(0,260,0,44); toast.Position = UDim2.new(1,-280,1,-60); toast.BackgroundColor3 = Color3.fromRGB(28,28,28); local tC = Instance.new("UICorner", toast); tC.CornerRadius = UDim.new(0,8)
-    local label = Instance.new("TextLabel", toast); label.Size = UDim2.new(1,-12,1,-12); label.Position = UDim2.new(0,6,0,6); label.BackgroundTransparency = 1; label.Font = Enum.Font.GothamBold; label.TextSize = 14; label.TextColor3 = Color3.fromRGB(255,255,255); label.Text = text; label.TextXAlignment = Enum.TextXAlignment.Left
-    TweenService:Create(toast, TweenInfo.new(0.4, Enum.EasingStyle.Quad), {Position = UDim2.new(1,-280,1,-120)}):Play()
-    task.delay(3, function()
-        TweenService:Create(toast, TweenInfo.new(0.3, Enum.EasingStyle.Quad), {BackgroundTransparency = 1}):Play()
-        TweenService:Create(label, TweenInfo.new(0.3, Enum.EasingStyle.Quad), {TextTransparency = 1}):Play()
-        task.delay(0.35, function() pcall(function() toast:Destroy() end) end)
-    end)
-end
-
--- ===== helper: applyTheme & sfx rebuild =====
-local function rebuildSFX(themeKey)
-    for _,v in pairs(SFX:GetChildren()) do pcall(function() v:Destroy() end) end
-    local t = THEMES[themeKey]
-    if not t or not t.sfx then return end
-    createSFX(t.sfx.open, "open")
-    createSFX(t.sfx.close, "close")
-    createSFX(t.sfx.click, "click")
-end
-
-function applyTheme(themeKey)
-    local t = THEMES[themeKey] or THEMES.Default
-    Window.BackgroundColor3 = t.window
-    winStroke.Color = t.accent
-    ToggleBtn.BackgroundColor3 = t.button
-    ToggleBtn.Text = t.symbol
-    -- exec button color if exists
-    local execBtn = PageFrames["Main"] and PageFrames["Main"]:FindFirstChild("ExecBtn")
-    if execBtn then execBtn.BackgroundColor3 = t.accent end
-    rebuildSFX(themeKey)
-    if SETTINGS.SFX then pcall(function() local s=SFX:FindFirstChild("open"); if s then s:Play() end end) end
-end
-
--- ===== helper: refresh texts (language) =====
-function refreshTexts()
-    local lang = SETTINGS.Language or DEFAULT_LANG
-    for i,name in ipairs(TAB_ORDER) do
-        local btn = TabButtons[name]
-        if btn then btn.Text = L[lang].tabs[i] or name end
-    end
-    -- main placeholder & execute text & label
-    local codeBox = PageFrames["Main"] and PageFrames["Main"]:FindFirstChild("CodeBox")
-    if codeBox then codeBox.PlaceholderText = L[lang].placeholder end
-    local execBtn = PageFrames["Main"] and PageFrames["Main"]:FindFirstChild("ExecBtn")
-    if execBtn then execBtn.Text = L[lang].execute end
-    local execLabel = PageFrames["Main"] and PageFrames["Main"]:FindFirstChild("ExecLabel")
-    if execLabel then execLabel.Text = string.format(L[lang].executor, SETTINGS.SelectedBase) end
-
-    -- profiles names
-    local idx = 1
-    for _,child in ipairs(PageFrames["Profiles"]:GetChildren()) do
-        if child:IsA("Frame") then
-            local lbl = nil
-            for _,c in ipairs(child:GetChildren()) do if c:IsA("TextLabel") then lbl = c break end end
-            if lbl then
-                lbl.Text = (PROFILES[idx] and PROFILES[idx].Name) or L[lang].empty
-            end
-            idx = idx + 1
-            if idx > MAX_SLOTS then break end
-        end
-    end
-end
-
--- ===== dragging (header/footer/toggle) =====
+-- ===== Dragging (header/footer/toggle) and prevent drag during resize =====
+local isResizing = false
 do
     local dragging = false
     local dragStart = Vector2.new()
-    local windowOrigin = UDim2.new()
-    local function beginDrag(input)
+    local originPos = UDim2.new()
+
+    local function inputBegan(input)
+        if isResizing then return end
         if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then return end
         dragging = true
         dragStart = input.Position
-        windowOrigin = Window.Position
+        originPos = Window.Position
         input.Changed:Connect(function()
             if input.UserInputState == Enum.UserInputState.End then
                 dragging = false
@@ -627,62 +605,60 @@ do
             end
         end)
     end
-    local function updateDrag(input)
+
+    local function inputChanged(input)
         if not dragging then return end
         if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
             local delta = input.Position - dragStart
-            Window.Position = UDim2.new(windowOrigin.X.Scale, windowOrigin.X.Offset + delta.X, windowOrigin.Y.Scale, windowOrigin.Y.Offset + delta.Y)
+            Window.Position = UDim2.new(originPos.X.Scale, originPos.X.Offset + delta.X, originPos.Y.Scale, originPos.Y.Offset + delta.Y)
         end
     end
 
-    -- header and footer drag
-    Header.InputBegan:Connect(beginDrag)
-    Footer.InputBegan:Connect(beginDrag)
-    -- allow also dragging by ToggleBtn: if user holds toggle and moves, move window
+    Header.InputBegan:Connect(inputBegan)
+    Footer.InputBegan:Connect(inputBegan)
     ToggleBtn.MouseButton1Down:Connect(function(input)
-        if input then
-            beginDrag(input)
-        end
+        if isResizing then return end
+        inputBegan(input)
     end)
-    UserInputService.InputChanged:Connect(updateDrag)
+    UserInputService.InputChanged:Connect(inputChanged)
 end
 
--- ===== ToggleBtn dragging (move the button itself) =====
+-- ToggleBtn movable separately
 do
     local draggingBtn = false
-    local startPosBtn
-    local originPosBtn
+    local startPosBtn, originBtn = nil, nil
     ToggleBtn.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            draggingBtn = true
-            startPosBtn = input.Position
-            originPosBtn = ToggleBtn.Position
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then draggingBtn = false end
-            end)
-        end
+        if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then return end
+        draggingBtn = true
+        startPosBtn = input.Position
+        originBtn = ToggleBtn.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then draggingBtn = false end
+        end)
     end)
     UserInputService.InputChanged:Connect(function(input)
         if not draggingBtn then return end
         if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
             local delta = input.Position - startPosBtn
-            ToggleBtn.Position = UDim2.new(originPosBtn.X.Scale, originPosBtn.X.Offset + delta.X, originPosBtn.Y.Scale, originPosBtn.Y.Offset + delta.Y)
+            ToggleBtn.Position = UDim2.new(originBtn.X.Scale, originBtn.X.Offset + delta.X, originBtn.Y.Scale, originBtn.Y.Offset + delta.Y)
         end
     end)
 end
 
--- ===== Resizer logic: resize in direction of drag (bottom-right anchor but support negative deltas) =====
+-- ===== Resizer: change only Size, do not move window (and block dragging while resizing) =====
 do
     local resizing = false
     local startPos, startSize
     Resizer.InputBegan:Connect(function(input)
         if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then return end
         resizing = true
+        isResizing = true
         startPos = input.Position
         startSize = Window.AbsoluteSize
         input.Changed:Connect(function()
             if input.UserInputState == Enum.UserInputState.End then
                 resizing = false
+                isResizing = false
                 SETTINGS.Size = { Window.AbsoluteSize.X, Window.AbsoluteSize.Y }
                 persistSettings()
             end
@@ -699,35 +675,50 @@ do
     end)
 end
 
--- ===== Close / Open / X button behavior =====
+-- ===== Open / Close behavior (preserve stored size & pos; prevent squish) =====
+local storedSize = Vector2.new(SETTINGS.Size[1], SETTINGS.Size[2])
+local storedPosition = UDim2.new(SETTINGS.Position[1], SETTINGS.Position[2] or 0, SETTINGS.Position[3], SETTINGS.Position[4] or 0)
 local isOpen = true
+
+local function openWindow()
+    isOpen = true
+    -- ensure window has small size to animate from
+    Window.Visible = true
+    Window.Size = UDim2.new(0, 18, 0, 18)
+    Window.Position = storedPosition
+    local tween = TweenService:Create(Window, TweenInfo.new(0.30, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(0, storedSize.X, 0, storedSize.Y)})
+    tween:Play()
+    if SETTINGS.SFX then pcall(function() local s = SFXFolder:FindFirstChild("open"); if s then s:Play() end end) end
+end
+
+local function closeWindow()
+    isOpen = false
+    -- animate to small size, but after animation restore stored size invisibly
+    storedSize = Vector2.new(Window.AbsoluteSize.X, Window.AbsoluteSize.Y)
+    storedPosition = Window.Position
+    local tween = TweenService:Create(Window, TweenInfo.new(0.18, Enum.EasingStyle.Sine, Enum.EasingDirection.In), {Size = UDim2.new(0,18,0,18)})
+    tween:Play()
+    if SETTINGS.SFX then pcall(function() local s = SFXFolder:FindFirstChild("close"); if s then s:Play() end end) end
+    tween.Completed:Connect(function()
+        Window.Visible = false
+        -- restore size for next open (invisible)
+        Window.Size = UDim2.new(0, storedSize.X, 0, storedSize.Y)
+        Window.Position = storedPosition
+    end)
+end
+
 ToggleBtn.MouseButton1Click:Connect(function()
-    isOpen = not isOpen
-    if isOpen then
-        Window.Visible = true
-        local t = TweenService:Create(Window, TweenInfo.new(0.26, Enum.EasingStyle.Back), {Size = Window.Size})
-        t:Play()
-        if SETTINGS.SFX then pcall(function() local s=SFX:FindFirstChild("open"); if s then s:Play() end end) end
-    else
-        local t = TweenService:Create(Window, TweenInfo.new(0.18, Enum.EasingStyle.Sine), {Size = UDim2.new(0,18,0,18)})
-        t:Play()
-        t.Completed:Connect(function() Window.Visible = false end)
-        if SETTINGS.SFX then pcall(function() local s=SFX:FindFirstChild("close"); if s then s:Play() end end) end
-    end
+    if isOpen then closeWindow() else openWindow() end
 end)
 
 CloseBtn.MouseButton1Click:Connect(function()
-    Window.Visible = false
-    isOpen = false
-    ToggleBtn.Text = L[SETTINGS.Language].open
-    if SETTINGS.SFX then pcall(function() local s=SFX:FindFirstChild("close"); if s then s:Play() end end) end
+    closeWindow()
 end)
 
--- ===== Window resize reaction: adjust text sizes & placeholder updates =====
+-- Adjust text sizes on resize
 local function onWindowResize()
     SETTINGS.Size = { Window.AbsoluteSize.X, Window.AbsoluteSize.Y }
-    -- adjust base text sizes
-    for _,obj in ipairs(Window:GetDescendants()) do
+    for _,obj in pairs(Window:GetDescendants()) do
         if obj:IsA("TextLabel") and not obj.TextScaled then
             local w = math.max(240, Window.AbsoluteSize.X)
             local size = math.clamp(math.floor(w / 60), 12, 20)
@@ -746,32 +737,61 @@ local function onWindowResize()
 end
 Window:GetPropertyChangedSignal("AbsoluteSize"):Connect(onWindowResize)
 
--- ===== Initial apply theme & texts =====
-function applyThemeAndBuild(theme)
-    applyTheme(theme)
-end
-
-function refreshTexts()
-    refreshTexts = refreshTexts -- no-op to satisfy linter; actual function defined earlier
-end
-
--- define applyTheme and refreshTexts if not present (they are above)
+-- Finalize theme & texts
 applyTheme(SETTINGS.Theme)
+refreshTexts = refreshTexts -- satisfy linter (function already defined above)
 refreshTexts()
 rebuildSFX(SETTINGS.Theme)
 
--- Show Main tab by default
+-- Show main tab by default
 for k,v in pairs(PageFrames) do v.Visible = false end
 PageFrames["Main"].Visible = true
 TabButtons["Main"].TextColor3 = Color3.fromRGB(255,255,255)
 
 -- Initial toast
-showToast( L[SETTINGS.Language].toast_loaded )
+showToast( LANG[SETTINGS.Language].toast_loaded )
 
--- Ensure profile UI texts reflect loaded profiles and language
-refreshTexts()
-
--- Save settings on leave (best effort)
+-- Save on script end (best effort)
 pcall(function() persistSettings(); persistProfiles() end)
 
+-- Add a few small extra helper features from assistant:
+-- 1) Quick "Copy raw infinite yield link" in Universal (for convenience)
+-- 2) A tiny "Test executor" button in Base to check availability
+-- (Add to appropriate pages.)
+
+-- Add quick features (non-blocking)
+do
+    -- Universal: copy raw link button
+    local uPage = PageFrames["Universal"]
+    if uPage then
+        local copyBtn = Instance.new("TextButton", uPage); copyBtn.Position = UDim2.new(0.27,0,0.32,0); copyBtn.Size = UDim2.new(0.46,0,0,28); copyBtn.Text = "Copy raw link"; copyBtn.Font = Enum.Font.Gotham; local cc = Instance.new("UICorner", copyBtn); cc.CornerRadius = UDim.new(0,6)
+        copyBtn.MouseButton1Click:Connect(function()
+            -- cannot access clipboard from Roblox reliably; show modal with link to copy
+            local link = "https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"
+            local modal = Instance.new("Frame", screenGui); modal.Size = UDim2.new(0,480,0,120); modal.Position = UDim2.new(0.5,-240,0.5,-60); modal.BackgroundColor3 = Color3.fromRGB(18,12,28)
+            local mc = Instance.new("UICorner", modal); mc.CornerRadius = UDim.new(0,8)
+            local tb = Instance.new("TextBox", modal); tb.Size = UDim2.new(1,-24,0,60); tb.Position = UDim2.new(0,12,0,12); tb.Text = link; tb.Font = Enum.Font.Code; tb.TextSize=14
+            local ok = Instance.new("TextButton", modal); ok.Size = UDim2.new(0,84,0,36); ok.Position = UDim2.new(1,-96,1,-44); ok.Text = "OK"; local okc = Instance.new("UICorner", ok); okc.CornerRadius=UDim.new(0,8)
+            ok.MouseButton1Click:Connect(function() modal:Destroy() end)
+            showToast("Copy link modal opened")
+        end)
+    end
+
+    -- Base: test executor button
+    local bPage = PageFrames["Base"]
+    if bPage then
+        local testBtn = Instance.new("TextButton", bPage); testBtn.Size = UDim2.new(0.4,0,0,32); testBtn.Position = UDim2.new(0.55,0,0,6); testBtn.Text = "Test Executor"; testBtn.Font = Enum.Font.Gotham; local tc = Instance.new("UICorner", testBtn); tc.CornerRadius = UDim.new(0,6)
+        testBtn.MouseButton1Click:Connect(function()
+            local base = SETTINGS.SelectedBase or DEFAULT_BASE
+            local fn = EXECUTORS[base]
+            local supported = false
+            if type(fn) == "function" then
+                local ok = pcall(function() supported = fn("print('FogHub executor test')") end)
+            end
+            if supported then showToast("Executor "..base.." appears available") else showToast("Executor "..base.." unavailable") end
+        end)
+    end
+end
+
 -- End of script
+```0
